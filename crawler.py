@@ -1,6 +1,7 @@
 import asyncio
 import json
 from playwright.async_api import async_playwright
+from playwright_stealth import stealth_async
 
 async def crawl_wadiz_closing():
     results = []
@@ -13,6 +14,7 @@ async def crawl_wadiz_closing():
             locale="ko-KR",
         )
         page = await context.new_page()
+        await stealth_async(page)  # ← 이 한 줄 추가
         await page.goto("https://www.wadiz.kr/web/wreward/category?order=closing")
         await page.wait_for_selector("a[href*='/web/campaign/detail']", timeout=15000)
 
@@ -39,15 +41,12 @@ async def crawl_wadiz_closing():
                 seen_urls.add(base_url)
                 url = f"https://www.wadiz.kr{base_url}"
 
-                # 제목 - KeyTitle 제외하고 순수 Title만
                 title_el = card.locator("div[class^='Title_container']")
                 title = await title_el.first.inner_text() if await title_el.count() > 0 else ""
 
-                # 달성률
                 rate_el = card.locator("[class*='KeyTitle_container']")
                 rate = await rate_el.first.inner_text() if await rate_el.count() > 0 else ""
 
-                # 금액
                 amount_el = card.locator("[class*='LabelBadge_gray']")
                 amount = await amount_el.first.inner_text() if await amount_el.count() > 0 else ""
 
@@ -59,7 +58,7 @@ async def crawl_wadiz_closing():
                     "achievement_rate": rate.strip(),
                 })
 
-            except Exception as e:
+            except Exception:
                 continue
 
         await browser.close()
