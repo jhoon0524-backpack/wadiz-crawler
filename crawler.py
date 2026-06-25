@@ -46,6 +46,7 @@ def crawl_wadiz_closing():
                 "title": item.get("title", "").strip(),
                 "url": f"https://www.wadiz.kr/web/campaign/detail/{item['campaignId']}",
                 "category": item.get("categoryName", ""),
+                "maker": item.get("nickName", ""),
                 "funding_amount": display,
                 "achievement_rate": f"{item.get('achievementRate', 0)}% 달성",
             })

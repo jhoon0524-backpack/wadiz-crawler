@@ -16,14 +16,14 @@ def get_service():
 def ensure_header(sheets):
     result = sheets.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range="오늘마감!A1:F1"
+        range="오늘마감!A1:G1"
     ).execute()
     if not result.get("values"):
         sheets.values().update(
             spreadsheetId=SPREADSHEET_ID,
             range="오늘마감!A1",
             valueInputOption="RAW",
-            body={"values": [["수집일", "프로젝트명", "URL", "카테고리", "펀딩금액", "달성률"]]}
+            body={"values": [["수집일", "프로젝트명", "URL", "카테고리", "메이커", "펀딩금액", "달성률"]]}
         ).execute()
 
 def upload_to_sheets(data: list):
@@ -39,6 +39,7 @@ def upload_to_sheets(data: list):
         item.get("title", ""),
         item.get("url", ""),
         item.get("category", ""),
+        item.get("maker", ""),
         item.get("funding_amount", ""),
         item.get("achievement_rate", ""),
     ] for item in data]
