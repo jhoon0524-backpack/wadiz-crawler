@@ -1,19 +1,36 @@
 import json
+import urllib.error
 import urllib.request
 
-API_URL = "https://service.wadiz.kr/api/search/funding"
+# 2026-08-22부터 와디즈 게이트웨이가 /api/search 접두어를 잘라낸 채 백엔드로 넘겨서
+# 접두어를 두 번 붙인 경로만 동작한다. 게이트웨이가 원복될 경우를 대비해 기존 경로로 폴백.
+API_URLS = [
+    "https://service.wadiz.kr/api/search/api/search/funding",
+    "https://service.wadiz.kr/api/search/funding",
+]
 PAGE_SIZE = 100
+
+_working_url = None
 
 
 def _fetch_page(offset):
+    global _working_url
     body = json.dumps({"order": "closing", "limit": PAGE_SIZE, "offset": offset}).encode("utf-8")
-    req = urllib.request.Request(
-        API_URL,
-        data=body,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
-    )
-    resp = urllib.request.urlopen(req, timeout=30)
-    return json.loads(resp.read().decode("utf-8"))
+    urls = [_working_url] if _working_url else API_URLS
+    for i, url in enumerate(urls):
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+        )
+        try:
+            resp = urllib.request.urlopen(req, timeout=30)
+        except urllib.error.HTTPError as e:
+            if e.code == 404 and i < len(urls) - 1:
+                continue
+            raise
+        _working_url = url
+        return json.loads(resp.read().decode("utf-8"))
 
 
 def crawl_wadiz_closing():
