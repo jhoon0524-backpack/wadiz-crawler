@@ -1,4 +1,4 @@
-name: API Probe (임시)
+name: Crawler 검증 (임시)
 
 on:
   push:
@@ -13,4 +13,4 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python probe_api.py
+      - run: python crawler.py
