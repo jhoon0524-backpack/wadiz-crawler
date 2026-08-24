@@ -1,4 +1,4 @@
-"""임시 진단 스크립트 2차: 새 API 경로 탐색 (확인 후 삭제)."""
+"""임시 진단 스크립트 3차: 웨이백 머신으로 와디즈 번들에서 API 경로 찾기 (확인 후 삭제)."""
 import gzip
 import io
 import json
@@ -6,103 +6,76 @@ import re
 import urllib.request
 import urllib.error
 
-UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-)
-BODY = json.dumps({"order": "closing", "limit": 2, "offset": 0}).encode("utf-8")
-
-API_HEADERS = {
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-    "User-Agent": UA,
-    "Referer": "https://www.wadiz.kr/",
-    "Origin": "https://www.wadiz.kr",
-    "Accept-Language": "ko-KR,ko;q=0.9",
-}
-HTML_HEADERS = {
-    "User-Agent": UA,
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
-    "Accept-Encoding": "gzip",
-    "Upgrade-Insecure-Requests": "1",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "sec-ch-ua": '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"macOS"',
-    "Cache-Control": "max-age=0",
-    "Connection": "keep-alive",
-}
+UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
 
 
-def read_body(resp_or_err):
-    raw = resp_or_err.read()
+def fetch(url, timeout=60):
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Encoding": "gzip"})
+    resp = urllib.request.urlopen(req, timeout=timeout)
+    raw = resp.read()
     if raw[:2] == b"\x1f\x8b":
         raw = gzip.GzipFile(fileobj=io.BytesIO(raw)).read()
     return raw
 
 
-def try_req(label, url, method="GET", body=None, headers=None, show=200):
-    req = urllib.request.Request(url, data=body, headers=headers or {}, method=method)
+def cdx(url_pattern, extra=""):
+    q = (
+        "https://web.archive.org/cdx/search/cdx?url=" + urllib.parse.quote(url_pattern, safe="")
+        + "&output=json&limit=8&from=20260601&filter=statuscode:200&collapse=urlkey" + extra
+    )
     try:
-        resp = urllib.request.urlopen(req, timeout=30)
-        raw = read_body(resp)
-        print(f"[{label}] {resp.status} len={len(raw)}")
-        print("  body:", raw[:show].decode("utf-8", "replace").replace("\n", " "))
-        return raw
-    except urllib.error.HTTPError as e:
-        raw = read_body(e)
-        print(f"[{label}] HTTPError {e.code} :: {raw[:show].decode('utf-8', 'replace')[:show]}")
+        return json.loads(fetch(q).decode("utf-8", "replace"))
     except Exception as e:
-        print(f"[{label}] {type(e).__name__}: {e}")
-    return None
+        print("cdx 실패:", url_pattern, type(e).__name__, e)
+        return []
 
 
-print("=== 후보 경로 스캔 (404=없음, 그 외=존재 가능) ===")
-candidates = [
-    "/api/search/funding",
-    "/api/search/funding/v2",
-    "/api/search/v2/funding",
-    "/api/search/v3/funding",
-    "/api/search/fundings",
-    "/api/search/funding-list",
-    "/api/search/campaign",
-    "/api/search/campaigns",
-    "/api/search/project",
-    "/api/search/projects",
-    "/api/search/integrated",
-    "/api/search/total",
-    "/api/search/main",
-    "/api/search/keyword",
-    "/api/search/recommend",
-    "/api/search/reward",
-    "/api/search/store",
-    "/api/search/comingsoon",
-    "/api/search",
-]
-for path in candidates:
-    try_req(f"POST {path}", f"https://service.wadiz.kr{path}", "POST", BODY, API_HEADERS, show=120)
+import urllib.parse
 
-print("=== 웹 페이지/번들에서 실제 경로 찾기 ===")
-for page_url in [
-    "https://www.wadiz.kr/robots.txt",
-    "https://www.wadiz.kr/web/wreward/main",
-    "https://m.wadiz.kr/web/wreward/main",
-]:
-    page = try_req(f"GET {page_url}", page_url, "GET", None, HTML_HEADERS, show=150)
-    if page and b"<html" in page[:2000].lower():
-        html = page.decode("utf-8", "replace")
-        for h in sorted(set(re.findall(r"[\"'][^\"']*api/search[^\"']{0,80}", html)))[:30]:
-            print("  html-hit:", h)
-        scripts = re.findall(r'src="(https?://[^"]+\.js[^"]*)"', html)
-        print("  scripts:", len(scripts))
-        for s in scripts[:10]:
-            js = try_req(f"  JS {s[-60:]}", s, "GET", None, {"User-Agent": UA, "Accept-Encoding": "gzip"}, show=0)
-            if js:
-                text = js.decode("utf-8", "replace")
-                for m in sorted(set(re.findall(r"[\"'][^\"']*api/search[^\"']{0,80}", text)))[:30]:
-                    print("   js-hit:", m[:140])
-        break
+print("=== 1) 최근 스냅샷 목록 ===")
+rows = cdx("www.wadiz.kr/web/wreward/main*")
+for r in rows[1:]:
+    print("  ", r[1], r[2])
+if len(rows) < 2:
+    rows = cdx("www.wadiz.kr/")
+    for r in rows[1:]:
+        print("  (root)", r[1], r[2])
+
+snap = None
+if len(rows) >= 2:
+    ts, orig = rows[-1][1], rows[-1][2]
+    snap_url = f"https://web.archive.org/web/{ts}id_/{orig}"
+    print("스냅샷:", snap_url)
+    try:
+        snap = fetch(snap_url).decode("utf-8", "replace")
+    except Exception as e:
+        print("스냅샷 fetch 실패:", type(e).__name__, e)
+
+if snap:
+    print("=== 2) HTML 내 api 경로 ===")
+    for h in sorted(set(re.findall(r"[^\"'\s]*api/[^\"'\s]{0,80}", snap)))[:40]:
+        print("  html:", h[:140])
+    scripts = re.findall(r'src="([^"]+\.js[^"]*)"', snap)
+    print("=== 3) 스크립트", len(scripts), "개 ===")
+    seen_hits = set()
+    for s in scripts[:15]:
+        if s.startswith("//"):
+            s = "https:" + s
+        if s.startswith("/") and not s.startswith("//"):
+            s = "https://www.wadiz.kr" + s
+        # 웨이백 스냅샷 경유 원본 자산
+        for candidate in [s, f"https://web.archive.org/web/{rows[-1][1]}id_/{s.split('id_/')[-1]}"]:
+            try:
+                js = fetch(candidate).decode("utf-8", "replace")
+            except Exception as e:
+                print("  js 실패:", candidate[:100], type(e).__name__)
+                continue
+            hits = set(re.findall(r"[^\"'\s]{0,60}api/search[^\"'\s]{0,80}", js))
+            hits |= set(re.findall(r"service\.wadiz\.kr[^\"'\s]{0,100}", js))
+            new = hits - seen_hits
+            if new:
+                print("  --", candidate[:110])
+                for m in sorted(new)[:40]:
+                    print("     hit:", m[:150])
+                seen_hits |= new
+            break
